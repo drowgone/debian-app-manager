@@ -81,7 +81,7 @@ AppImage-файлов и управления записями автозапу�
 Клонирование из GitHub:
 
 ```bash
-git clone https://github.com/<username>/debian-app-manager.git
+git https://github.com/drowgone/debian-app-manager.git
 cd debian-app-manager
 ```
 

@@ -79,7 +79,7 @@ source or command caused a problem.
 Clone from GitHub:
 
 ```bash
-git clone https://github.com/<username>/debian-app-manager.git
+git https://github.com/drowgone/debian-app-manager.git
 cd debian-app-manager
 ```
 

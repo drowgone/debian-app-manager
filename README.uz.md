@@ -79,7 +79,7 @@ bo'lganini tez tushunishga yordam beradi.
 GitHub'dan klon qilish:
 
 ```bash
-git clone https://github.com/<username>/debian-app-manager.git
+git clone https://github.com/drowgone/debian-app-manager.git
 cd debian-app-manager
 ```
 
