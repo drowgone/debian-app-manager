@@ -1,12 +1,10 @@
 # External Application Manager
 
-This is the English version for the GitHub homepage. If you need a different language, you can use the following files:
-
+This is the English landing page for the GitHub repository. If you need a different language, you can use the following files:
 
 - [English](README.en.md)
 - [Русский](README.ru.md)
 - [O‘zbekcha](README.uz.md)
-
 
 External Application Manager is a PySide6-based GUI application for
 Debian/Ubuntu-based Linux systems that lets you view, launch, update,
