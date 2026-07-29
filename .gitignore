@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Build and packaging output
+build/
+dist/
+*.egg-info/
+
+# Local editor and OS files
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+
+# Local runtime artifacts
+*.log
+*.tmp
+*.bak
