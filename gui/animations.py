@@ -15,6 +15,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QFont, QPainter, QColor
 
+from gui.i18n import tr
 from gui.theme import colors as theme_colors
 
 
@@ -199,7 +200,7 @@ class OperationOverlay(QFrame):
         self._spinner = SpinnerWidget(size=56)
         layout.addWidget(self._spinner, alignment=Qt.AlignmentFlag.AlignCenter)
 
-        self._label = TextSpinnerLabel("Skanerlanmoqda...")
+        self._label = TextSpinnerLabel(tr("progress.scan"))
         self._label.setStyleSheet(
             f"color: {c['accent']}; font-weight: 600; font-size: 14px;"
         )
@@ -260,10 +261,10 @@ class AnimatedProgressBar(QProgressBar):
 
         c = theme_colors()
         op_colors = {
-            "scan":    (c["accent"], c["accent_hover"], "Skanerlanmoqda..."),
-            "install": (c["success"], "#26a269", "O'rnatilmoqda..."),
-            "remove":  (c["danger"], c["danger_hover"], "O'chirilmoqda..."),
-            "update":  (c["warning"], c["success"], "Yangilanmoqda..."),
+            "scan":    (c["accent"], c["accent_hover"], tr("progress.scan")),
+            "install": (c["success"], "#26a269", tr("progress.install")),
+            "remove":  (c["danger"], c["danger_hover"], tr("progress.remove")),
+            "update":  (c["warning"], c["success"], tr("progress.update")),
         }
         primary, secondary, default_text = op_colors.get(operation, op_colors["scan"])
         self._primary = primary
@@ -316,7 +317,7 @@ class AnimatedProgressBar(QProgressBar):
         self._timer.stop()
         self.setRange(0, 1)
         self.setValue(1)
-        self.setFormat("✓ Tugallandi")
+        self.setFormat(tr("progress.done"))
         c = theme_colors()
         self.setStyleSheet(f"""
             QProgressBar {{
@@ -338,7 +339,7 @@ class AnimatedProgressBar(QProgressBar):
         self._timer.stop()
         self.setRange(0, 1)
         self.setValue(1)
-        self.setFormat("✗ Xatolik")
+        self.setFormat(tr("progress.error"))
         c = theme_colors()
         self.setStyleSheet(f"""
             QProgressBar {{
@@ -378,11 +379,11 @@ class OperationBadge(QWidget):
 
         c = theme_colors()
         op_map = {
-            "remove": (c["danger"], "O'chirilmoqda"),
-            "update": (c["success"], "Yangilanmoqda"),
-            "install": (c["accent"], "O'rnatilmoqda"),
+            "remove": (c["danger"], tr("progress.remove")),
+            "update": (c["success"], tr("progress.update")),
+            "install": (c["accent"], tr("progress.install")),
         }
-        color, text = op_map.get(operation, (c["accent"], "Jarayonda"))
+        color, text = op_map.get(operation, (c["accent"], tr("operation.processing")))
         self._spinner = SpinnerWidget(size=20, color=color)
         layout.addWidget(self._spinner)
 

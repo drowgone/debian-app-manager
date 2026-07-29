@@ -15,17 +15,18 @@ from PySide6.QtGui import QIcon
 
 from core.scanner import App
 from core.desktop_parser import parse_desktop_entry
+from gui.i18n import tr
 from gui.theme import colors, system_ui_font
 from gui.widgets import SourceBadge, LaunchButton, UpdateButton, RemoveButton
 from gui.animations import AnimatedProgressBar, TextSpinnerLabel
 
 
 _SOURCE_LABELS = {
-    "apt": "APT (Debian paket menejeri)",
-    "snap": "Snap",
-    "flatpak": "Flatpak",
-    "appimage": "AppImage",
-    "manual": "Qo'lda o'rnatilgan",
+    "apt": "source.apt",
+    "snap": "source.snap",
+    "flatpak": "source.flatpak",
+    "appimage": "source.appimage",
+    "manual": "source.manual",
 }
 
 
@@ -101,7 +102,7 @@ class AppDetailDialog(QDialog):
         badge_row.setSpacing(8)
         badge_row.addWidget(SourceBadge(app.source))
         if app.has_update:
-            upd = QLabel(" Yangilanish mavjud ")
+            upd = QLabel(f" {tr('badge.update')} ")
             upd.setFont(system_ui_font(9, bold=True))
             upd.setStyleSheet(
                 f"background-color: {c['success_bg']}; color: {c['success_text']}; "
@@ -135,25 +136,25 @@ class AppDetailDialog(QDialog):
         desktop_meta = self._desktop_meta(app)
 
         rows: list[tuple[str, str]] = [
-            ("Manba", _SOURCE_LABELS.get(app.source, app.source)),
-            ("Identifikator", app.identifier),
+            (tr("detail.source"), tr(_SOURCE_LABELS.get(app.source, app.source))),
+            (tr("detail.identifier"), app.identifier),
         ]
         if app.version:
-            rows.append(("Versiya", app.version))
+            rows.append((tr("detail.version"), app.version))
         if app.has_update and app.new_version:
-            rows.append(("Yangi versiya", app.new_version))
+            rows.append((tr("detail.new_version"), app.new_version))
         if app.size:
-            rows.append(("Hajm", app.size))
+            rows.append((tr("detail.size"), app.size))
         if app.date:
-            rows.append(("Sana", app.date))
+            rows.append((tr("detail.date"), app.date))
         if desktop_meta.get("Comment"):
-            rows.append(("Tavsif", desktop_meta["Comment"]))
+            rows.append((tr("detail.description"), desktop_meta["Comment"]))
         if desktop_meta.get("Categories"):
-            rows.append(("Kategoriya", desktop_meta["Categories"].replace(";", " · ")))
+            rows.append((tr("detail.category"), desktop_meta["Categories"].replace(";", " · ")))
         if app.exec_line:
-            rows.append(("Ishga tushirish", app.exec_line))
+            rows.append((tr("detail.exec"), app.exec_line))
         if app.desktop_path:
-            rows.append(("Desktop fayl", app.desktop_path))
+            rows.append((tr("detail.desktop"), app.desktop_path))
 
         for label, value in rows:
             grid.addWidget(_DetailRow(label, value))
@@ -189,7 +190,7 @@ class AppDetailDialog(QDialog):
         self._launch_btn = LaunchButton()
         self._launch_btn.setEnabled(can_launch)
         if not can_launch:
-            self._launch_btn.setToolTip("Ishga tushirish buyrug'i topilmadi")
+            self._launch_btn.setToolTip(tr("detail.no_launch"))
         self._launch_btn.clicked.connect(self.launch_requested.emit)
         self._btn_row.addWidget(self._launch_btn)
 
@@ -205,7 +206,7 @@ class AppDetailDialog(QDialog):
 
         self._btn_row.addStretch()
 
-        self._close_btn = QPushButton("Yopish")
+        self._close_btn = QPushButton(tr("detail.close"))
         self._close_btn.setObjectName("primaryBtn")
         self._close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._close_btn.clicked.connect(self.accept)

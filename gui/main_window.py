@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QStatusBar, QLabel, QAbstractItemView, QProgressBar, QSizePolicy,
     QListWidget, QTextEdit, QDialog, QFrame,
 )
-from PySide6.QtCore import Qt, QTimer, QSize
+from PySide6.QtCore import Qt, QTimer, QSize, QSignalBlocker
 from PySide6.QtGui import QIcon, QColor
 
 from gui.theme import (
@@ -26,6 +26,7 @@ from gui.theme import (
     terminal_stylesheet, info_banner_stylesheet,
     TAB_ICONS, ACTION_ICONS,
 )
+from gui.i18n import LANGUAGES, current_language, set_language, tr
 
 from core.scanner import App
 from core.launcher import launch_app
@@ -62,7 +63,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Tashqi Dastur Boshqaruvchisi")
+        self.setWindowTitle(tr("app.title"))
         self.setMinimumSize(850, 600)
         self.resize(1000, 700)
         self.setWindowIcon(
@@ -83,6 +84,7 @@ class MainWindow(QMainWindow):
         self._install_worker: InstallWorker | None = None
         self._install_dialog: QDialog | None = None
         self._animate_update_check = True  # faqat dastur ishga tushganda
+        self._last_boot_info: tuple[str, list[tuple[str, str]]] | None = None
 
         # UI
         self._setup_ui()
@@ -91,7 +93,7 @@ class MainWindow(QMainWindow):
 
         # Animatsiya yordamchilari
         self._refresh_animator = RotatingIconButton(
-            self._refresh_btn, "Yangilash", "Skanerlanmoqda..."
+            self._refresh_btn, tr("refresh"), tr("refresh.busy")
         )
         self._status_pulse: PulseAnimator | None = None
 
@@ -128,7 +130,7 @@ class MainWindow(QMainWindow):
         self._tabs.addTab(
             apps_tab,
             QIcon.fromTheme(TAB_ICONS["apps"]),
-            "Dasturlar",
+            tr("tabs.apps"),
         )
 
         # Tab 2: Avtoishga tushish
@@ -136,7 +138,7 @@ class MainWindow(QMainWindow):
         self._tabs.addTab(
             autostart_tab,
             QIcon.fromTheme(TAB_ICONS["autostart"]),
-            "Avtoishga tushish",
+            tr("tabs.autostart"),
         )
 
         # Tab 3: Tozalash
@@ -144,7 +146,7 @@ class MainWindow(QMainWindow):
         self._tabs.addTab(
             cleaner_tab,
             QIcon.fromTheme(TAB_ICONS["cleaner"]),
-            "Tozalash",
+            tr("tabs.cleaner"),
         )
 
         # Tab 4: Xatoliklar
@@ -152,13 +154,13 @@ class MainWindow(QMainWindow):
         self._tabs.addTab(
             errors_tab,
             QIcon.fromTheme(TAB_ICONS["errors"]),
-            "Xatoliklar",
+            tr("tabs.errors"),
         )
 
         # Status bar
         self._status_bar = QStatusBar()
         self.setStatusBar(self._status_bar)
-        self._status_bar.showMessage("Tayyor")
+        self._status_bar.showMessage(tr("ready"))
 
     def _create_header(self) -> QFrame:
         """GNOME-style header bar — sarlavha va yangilash tugmasi."""
@@ -185,20 +187,34 @@ class MainWindow(QMainWindow):
         title_col.setSpacing(0)
         title_col.setContentsMargins(0, 0, 0, 0)
 
-        title = QLabel("Tashqi Dastur Boshqaruvchisi")
-        title.setObjectName("appTitle")
-        title.setFont(system_ui_font(15, bold=True))
-        title_col.addWidget(title)
+        self._title_label = QLabel(tr("app.title"))
+        self._title_label.setObjectName("appTitle")
+        self._title_label.setFont(system_ui_font(15, bold=True))
+        title_col.addWidget(self._title_label)
 
-        subtitle = QLabel("APT · Snap · Flatpak · AppImage")
-        subtitle.setObjectName("appSubtitle")
-        subtitle.setFont(system_ui_font(10))
-        title_col.addWidget(subtitle)
+        self._subtitle_label = QLabel(tr("app.subtitle"))
+        self._subtitle_label.setObjectName("appSubtitle")
+        self._subtitle_label.setFont(system_ui_font(10))
+        title_col.addWidget(self._subtitle_label)
 
         layout.addLayout(title_col)
         layout.addStretch()
 
-        self._refresh_btn = QPushButton("  Yangilash")
+        self._language_label = QLabel(tr("language.label"))
+        self._language_label.setObjectName("appSubtitle")
+        layout.addWidget(self._language_label)
+
+        self._language_combo = QComboBox()
+        self._language_combo.setMinimumWidth(115)
+        for code, label in LANGUAGES.items():
+            self._language_combo.addItem(label, code)
+        active_index = self._language_combo.findData(current_language())
+        if active_index >= 0:
+            self._language_combo.setCurrentIndex(active_index)
+        self._language_combo.currentIndexChanged.connect(self._on_language_changed)
+        layout.addWidget(self._language_combo)
+
+        self._refresh_btn = QPushButton(f"  {tr('refresh')}")
         self._refresh_btn.setObjectName("refreshBtn")
         self._refresh_btn.setIcon(QIcon.fromTheme(ACTION_ICONS["refresh"]))
         self._refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -206,6 +222,110 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._refresh_btn)
 
         return header
+
+    def _on_language_changed(self, index: int) -> None:
+        """Language selector changed — update the UI and persist the choice."""
+        language = self._language_combo.itemData(index)
+        if not language:
+            return
+        set_language(str(language))
+        self._apply_language()
+
+    def _apply_language(self) -> None:
+        """Refresh visible UI text after the current language changes."""
+        self.setWindowTitle(tr("app.title"))
+
+        if hasattr(self, "_title_label"):
+            self._title_label.setText(tr("app.title"))
+        if hasattr(self, "_subtitle_label"):
+            self._subtitle_label.setText(tr("app.subtitle"))
+        if hasattr(self, "_language_label"):
+            self._language_label.setText(tr("language.label"))
+        if hasattr(self, "_refresh_btn"):
+            self._refresh_btn.setText(f"  {tr('refresh')}")
+
+        if hasattr(self, "_apps_header"):
+            self._apps_header.set_text(tr("apps.header"), tr("apps.subtitle"))
+        if hasattr(self, "_autostart_header"):
+            self._autostart_header.set_text(tr("autostart.header"), tr("autostart.subtitle"))
+        if hasattr(self, "_errors_header"):
+            self._errors_header.set_text(tr("errors.header"), tr("errors.subtitle"))
+
+        if hasattr(self, "_apps_table"):
+            self._apps_table.setHorizontalHeaderLabels([
+                tr("apps.col.name"), tr("apps.col.source"), tr("apps.col.action")
+            ])
+        if hasattr(self, "_autostart_table"):
+            self._autostart_table.setHorizontalHeaderLabels([
+                tr("autostart.col.name"), tr("autostart.col.status"), tr("autostart.col.action")
+            ])
+
+        if hasattr(self, "_tabs"):
+            self._tabs.setTabText(self._TAB_APPS, tr("tabs.apps"))
+            self._tabs.setTabText(self._TAB_AUTOSTART, tr("tabs.autostart"))
+            self._tabs.setTabText(self._TAB_CLEANER, tr("tabs.cleaner"))
+            self._tabs.setTabText(self._TAB_ERRORS, self._errors_tab_title())
+
+        if hasattr(self, "_status_bar"):
+            self._status_bar.showMessage(tr("ready"))
+
+        if hasattr(self, "_search_input"):
+            self._search_input.setPlaceholderText(tr("apps.search"))
+
+        if hasattr(self, "_source_filter"):
+            current_source = self._source_filter.currentData()
+            self._source_filter.blockSignals(True)
+            self._source_filter.clear()
+            self._source_filter.addItem(tr("apps.all"), None)
+            self._source_filter.addItem("APT", "apt")
+            self._source_filter.addItem("Snap", "snap")
+            self._source_filter.addItem("Flatpak", "flatpak")
+            self._source_filter.addItem("AppImage", "appimage")
+            self._source_filter.addItem(tr("apps.manual"), "manual")
+            if current_source is not None:
+                index = self._source_filter.findData(current_source)
+                if index >= 0:
+                    self._source_filter.setCurrentIndex(index)
+                else:
+                    self._source_filter.setCurrentIndex(0)
+            else:
+                self._source_filter.setCurrentIndex(0)
+            self._source_filter.blockSignals(False)
+
+        if hasattr(self, "_install_file_btn"):
+            self._install_file_btn.setText(f"  {tr('apps.install_file')}")
+        if hasattr(self, "_clear_errors_btn"):
+            self._clear_errors_btn.setText(f"  {tr('errors.clear')}")
+        if hasattr(self, "_chk_apt_cache"):
+            self._chk_apt_cache.setText(tr("cleaner.apt_cache"))
+        if hasattr(self, "_chk_apt_autoremove"):
+            self._chk_apt_autoremove.setText(tr("cleaner.autoremove"))
+        if hasattr(self, "_chk_apt_leftovers"):
+            self._chk_apt_leftovers.setText(tr("cleaner.leftovers"))
+        if hasattr(self, "_chk_flatpak"):
+            self._chk_flatpak.setText(tr("cleaner.flatpak"))
+        if hasattr(self, "_chk_journal"):
+            self._chk_journal.setText(tr("cleaner.journal"))
+        if hasattr(self, "_start_clean_btn"):
+            self._start_clean_btn.setText(f"  {tr('cleaner.start')}")
+        if hasattr(self, "_cleaner_header"):
+            self._cleaner_header.set_text(tr("cleaner.header"), tr("cleaner.subtitle"))
+        if hasattr(self, "_app_count_label") and self._apps:
+            self._populate_apps_table()
+        if hasattr(self, "_autostart_table") and self._autostart_entries:
+            self._populate_autostart_table()
+        if hasattr(self, "_boot_info_label") and self._last_boot_info is not None:
+            self._on_boot_info_ready(self._last_boot_info)
+        self._refresh_errors_tab_title()
+
+    def _errors_tab_title(self) -> str:
+        if self._errors:
+            return f"{tr('errors.header')} ({len(self._errors)})"
+        return tr("errors.header")
+
+    def _refresh_errors_tab_title(self) -> None:
+        if hasattr(self, "_tabs"):
+            self._tabs.setTabText(self._TAB_ERRORS, self._errors_tab_title())
 
     def _create_apps_tab(self) -> QWidget:
         """Dasturlar tab'ini yaratadi."""
@@ -215,17 +335,18 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 14, 0, 0)
         layout.setSpacing(12)
 
-        layout.addWidget(SectionHeader(
-            "O'rnatilgan dasturlar",
-            "Dasturlarni qidiring, manba bo'yicha saralang yoki fayldan o'rnating.",
+        self._apps_header = SectionHeader(
+            tr("apps.header"),
+            tr("apps.subtitle"),
             "application-x-executable-symbolic",
-        ))
+        )
+        layout.addWidget(self._apps_header)
 
         # Qidiruv va filtr satri
         toolbar = TabToolbar()
 
         self._search_input = QLineEdit()
-        self._search_input.setPlaceholderText("Dastur nomini qidirish...")
+        self._search_input.setPlaceholderText(tr("apps.search"))
         self._search_input.addAction(
             QIcon.fromTheme(ACTION_ICONS["search"]), QLineEdit.ActionPosition.LeadingPosition
         )
@@ -233,16 +354,20 @@ class MainWindow(QMainWindow):
         toolbar.add_widget(self._search_input, stretch=1)
 
         self._source_filter = QComboBox()
-        self._source_filter.addItems([
-            "Barchasi", "APT", "Snap", "Flatpak", "AppImage", "Qo'lda",
-        ])
-        self._source_filter.currentTextChanged.connect(self._filter_apps)
+        self._source_filter.addItem(tr("apps.all"), None)
+        self._source_filter.addItem("APT", "apt")
+        self._source_filter.addItem("Snap", "snap")
+        self._source_filter.addItem("Flatpak", "flatpak")
+        self._source_filter.addItem("AppImage", "appimage")
+        self._source_filter.addItem(tr("apps.manual"), "manual")
+        self._source_filter.setCurrentIndex(0)
+        self._source_filter.currentIndexChanged.connect(self._filter_apps)
         toolbar.add_widget(self._source_filter)
 
         self._app_count_label = CountBadge("")
         toolbar.add_widget(self._app_count_label)
 
-        self._install_file_btn = QPushButton("  Fayldan o'rnatish")
+        self._install_file_btn = QPushButton(f"  {tr('apps.install_file')}")
         self._install_file_btn.setObjectName("primaryBtn")
         self._install_file_btn.setIcon(QIcon.fromTheme(ACTION_ICONS["install"]))
         self._install_file_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -254,7 +379,9 @@ class MainWindow(QMainWindow):
         # Jadval
         self._apps_table = QTableWidget()
         self._apps_table.setColumnCount(3)
-        self._apps_table.setHorizontalHeaderLabels(["Nomi", "Manba", "Amal"])
+        self._apps_table.setHorizontalHeaderLabels([
+            tr("apps.col.name"), tr("apps.col.source"), tr("apps.col.action")
+        ])
         self._apps_table.horizontalHeader().setSectionResizeMode(
             0, QHeaderView.ResizeMode.Stretch
         )
@@ -298,15 +425,15 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 14, 0, 0)
         layout.setSpacing(12)
 
-        layout.addWidget(SectionHeader(
-            "Avtoishga tushish",
-            "Kompyuter yoqilganda ishga tushadigan dasturlarni boshqaring.",
+        self._autostart_header = SectionHeader(
+            tr("autostart.header"),
+            tr("autostart.subtitle"),
             "system-run-symbolic",
-        ))
+        )
+        layout.addWidget(self._autostart_header)
 
         self._boot_info_label = QLabel(
-            "Tizim yuklanganda avtomatik ishga tushadigan dasturlar. "
-            "Tizim darajasidagi yozuvlar override orqali boshqariladi."
+            tr("autostart.info")
         )
         self._boot_info_label.setObjectName("infoBannerText")
         self._boot_info_label.setWordWrap(True)
@@ -320,7 +447,9 @@ class MainWindow(QMainWindow):
         # Jadval
         self._autostart_table = QTableWidget()
         self._autostart_table.setColumnCount(3)
-        self._autostart_table.setHorizontalHeaderLabels(["Nomi va Yuklanish", "Holati", "Amal"])
+        self._autostart_table.setHorizontalHeaderLabels([
+            tr("autostart.col.name"), tr("autostart.col.status"), tr("autostart.col.action")
+        ])
         self._autostart_table.horizontalHeader().setSectionResizeMode(
             0, QHeaderView.ResizeMode.Stretch
         )
@@ -361,42 +490,42 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 14, 0, 0)
         layout.setSpacing(12)
 
-        layout.addWidget(SectionHeader(
-            "Tizimni tozalash",
-            "Keraksiz keshlar va eskirgan fayllarni xavfsiz tarzda tanlab tozalang.",
+        self._cleaner_header = SectionHeader(
+            tr("cleaner.header"),
+            tr("cleaner.subtitle"),
             "edit-clear-all-symbolic",
-        ))
+        )
+        layout.addWidget(self._cleaner_header)
 
         layout.addWidget(InfoBanner(
-            "Tizimda vaqt o'tishi bilan yig'ilib qoladigan keshlar, "
-            "o'chirilgan dastur qoldiqlari va eskirgan loglarni tozalash orqali bo'sh joy ochishingiz mumkin."
+            tr("cleaner.info")
         ))
 
         options_card = CardFrame()
         options_layout = options_card._layout
         options_layout.setContentsMargins(16, 14, 16, 14)
         options_layout.setSpacing(6)
-        options_title = QLabel("Tozalash parametrlari")
-        options_title.setObjectName("sectionTitle")
-        options_layout.addWidget(options_title)
+        self._cleaner_options_title = QLabel(tr("cleaner.options"))
+        self._cleaner_options_title.setObjectName("sectionTitle")
+        options_layout.addWidget(self._cleaner_options_title)
 
-        self._chk_apt_cache = QCheckBox("APT keshini tozalash (apt-get clean)")
+        self._chk_apt_cache = QCheckBox(tr("cleaner.apt_cache"))
         self._chk_apt_cache.setChecked(True)
         options_layout.addWidget(self._chk_apt_cache)
 
-        self._chk_apt_autoremove = QCheckBox("Keraksiz bog'liqliklarni o'chirish (autoremove)")
+        self._chk_apt_autoremove = QCheckBox(tr("cleaner.autoremove"))
         self._chk_apt_autoremove.setChecked(True)
         options_layout.addWidget(self._chk_apt_autoremove)
 
-        self._chk_apt_leftovers = QCheckBox("O'chirilgan dasturlar konfiguratsiya qoldiqlarini tozalash (dpkg --purge)")
+        self._chk_apt_leftovers = QCheckBox(tr("cleaner.leftovers"))
         self._chk_apt_leftovers.setChecked(True)
         options_layout.addWidget(self._chk_apt_leftovers)
 
-        self._chk_flatpak = QCheckBox("Ishlatilmayotgan Flatpak kutubxonalarini tozalash")
+        self._chk_flatpak = QCheckBox(tr("cleaner.flatpak"))
         self._chk_flatpak.setChecked(True)
         options_layout.addWidget(self._chk_flatpak)
 
-        self._chk_journal = QCheckBox("Tizim loglarini qisqartirish (oxirgi 3 kunlikni qoldirish)")
+        self._chk_journal = QCheckBox(tr("cleaner.journal"))
         self._chk_journal.setChecked(True)
         options_layout.addWidget(self._chk_journal)
 
@@ -405,7 +534,7 @@ class MainWindow(QMainWindow):
         btn_layout = QHBoxLayout()
         btn_layout.setContentsMargins(0, 0, 0, 0)
 
-        self._start_clean_btn = QPushButton("  Tozalashni boshlash")
+        self._start_clean_btn = QPushButton(f"  {tr('cleaner.start')}")
         self._start_clean_btn.setObjectName("dangerBtn")
         self._start_clean_btn.setIcon(QIcon.fromTheme(ACTION_ICONS["remove"]))
         self._start_clean_btn.setMinimumHeight(40)
@@ -439,14 +568,15 @@ class MainWindow(QMainWindow):
 
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.addWidget(SectionHeader(
-            "Xatoliklar va ogohlantirishlar",
-            "Dastur ishlashi davomida yuz bergan muammalar ro'yxati.",
+        self._errors_header = SectionHeader(
+            tr("errors.header"),
+            tr("errors.subtitle"),
             "dialog-warning-symbolic",
-        ))
+        )
+        header_layout.addWidget(self._errors_header)
         header_layout.addStretch()
 
-        self._clear_errors_btn = QPushButton("  Tozalash")
+        self._clear_errors_btn = QPushButton(f"  {tr('errors.clear')}")
         self._clear_errors_btn.setIcon(QIcon.fromTheme("edit-clear"))
         self._clear_errors_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._clear_errors_btn.clicked.connect(self._clear_errors)
@@ -472,10 +602,10 @@ class MainWindow(QMainWindow):
 
         self._refresh_animator.start()
         self._scan_overlay.show_operation(
-            "Dasturlar skanerlanmoqda...",
-            "APT, Snap, Flatpak va AppImage qidirilmoqda",
+            tr("scan.operation"),
+            tr("scan.sub"),
         )
-        self._status_bar.showMessage("Dasturlar skanerlanmoqda...")
+        self._status_bar.showMessage(tr("scan.status"))
         self._pulse_status_bar(True)
 
         self._scan_worker = ScanWorker(self)
@@ -501,28 +631,28 @@ class MainWindow(QMainWindow):
         overall, top = boot_info
         
         lines = [
-            f"<b>Tizim ishga tushish vaqti:</b> {overall or 'Aniqlanmadi'}",
-            "<br/><i>Tizimni ko'p band qilgan xizmatlar (Top 5):</i>"
+            tr("boot.time", overall=overall or tr("not_detected")),
+            tr("boot.top"),
         ]
         if top:
             for srv, time_str in top:
                 lines.append(f" • <b>{srv}</b> — {time_str}")
         else:
-            lines.append(" • Ma'lumot topilmadi.")
-            
+            lines.append(tr("boot.not_found"))
+
         self._boot_info_label.setText("<br/>".join(lines))
 
     def _on_scan_error(self, message: str) -> None:
         """Skanerlashda xatolik bo'lganda chaqiriladi."""
         self._status_bar.showMessage(f"⚠️  {message}", 5000)
-        self._add_error(f"Skanerlash xatoligi: {message}")
+        self._add_error(tr("scan.error", message=message))
 
     def _start_update_check(self, *, animated: bool = False) -> None:
         if animated:
-            self._status_bar.showMessage("Yangilanishlar tekshirilmoqda...")
+            self._status_bar.showMessage(tr("updates.checking"))
             self._scan_overlay.show_operation(
-                "Yangilanishlar tekshirilmoqda...",
-                "APT, Snap va Flatpak repozitoriyalari tekshirilmoqda",
+                tr("updates.checking"),
+                tr("updates.checking_sub"),
                 color=colors()["success"],
             )
         self._update_check_worker = UpdateCheckWorker(self)
@@ -544,9 +674,9 @@ class MainWindow(QMainWindow):
         if animated:
             self._scan_overlay.hide_operation()
             if count > 0:
-                self._status_bar.showMessage(f"🟢 {count} ta dastur uchun yangilanish mavjud", 5000)
+                self._status_bar.showMessage(tr("updates.available_icon", count=count), 5000)
             else:
-                self._status_bar.showMessage("✓ Barcha dasturlar yangilangan", 5000)
+                self._status_bar.showMessage(tr("updates.all_current"), 5000)
             self._success_flash.flash()
             self._animate_update_check = False
         elif count > 0:
@@ -563,7 +693,7 @@ class MainWindow(QMainWindow):
         else:
             self._scan_overlay.hide_operation()
             self._pulse_status_bar(False)
-            self._status_bar.showMessage(f"✓ {total} ta dastur topildi", 5000)
+            self._status_bar.showMessage(tr("scan.found", total=total), 5000)
             self._start_update_check(animated=False)
 
     def _load_icon(self, icon_name: str) -> QIcon:
@@ -579,16 +709,7 @@ class MainWindow(QMainWindow):
     def _populate_apps_table(self) -> None:
         """Dasturlar jadvalini to'ldiradi (filtr bilan)."""
         search_text = self._search_input.text().lower().strip()
-        source_filter = self._source_filter.currentText()
-
-        # Filtr xaritasi
-        source_map = {
-            "APT": "apt",
-            "Snap": "snap",
-            "Flatpak": "flatpak",
-            "AppImage": "appimage",
-            "Qo'lda": "manual",
-        }
+        source_filter = self._source_filter.currentData()
 
         filtered: list[App] = []
         for app in self._apps:
@@ -596,9 +717,8 @@ class MainWindow(QMainWindow):
             if search_text and search_text not in app.name.lower():
                 continue
             # Manba filtri
-            if source_filter != "Barchasi":
-                expected_source = source_map.get(source_filter, "")
-                if app.source != expected_source:
+            if source_filter is not None:
+                if app.source != source_filter:
                     continue
             filtered.append(app)
 
@@ -617,9 +737,11 @@ class MainWindow(QMainWindow):
             # Yangilanish bor bo'lsa tooltip qo'shish
             if app.has_update and app.new_version:
                 info_widget.setToolTip(
-                    f"Yangilanish mavjud!\n"
-                    f"Yangi versiya: {app.new_version}\n"
-                    f"Hozirgi versiya: {app.version or 'nomalum'}"
+                    tr(
+                        "apps.update_tip",
+                        new=app.new_version,
+                        current=app.version or tr("unknown"),
+                    )
                 )
             # UserRole uchun hidden item (matn yozilmaydi, chunki info_widget ustma-ust tushib qoladi)
             name_item = QTableWidgetItem("")
@@ -687,7 +809,7 @@ class MainWindow(QMainWindow):
         total = len(self._apps)
         shown = len(filtered)
         if shown == total:
-            self._app_count_label.setText(f"{total} ta dastur")
+            self._app_count_label.setText(tr("apps.count", total=total))
         else:
             self._app_count_label.setText(f"{shown} / {total}")
 
@@ -723,29 +845,29 @@ class MainWindow(QMainWindow):
             # Nomi va Yuklanish
             name_text = entry.name
             if entry.is_system:
-                name_text += "  [tizim]"
+                name_text += f"  [{tr('autostart.system')}]"
             icon = self._load_icon(entry.icon)
             
             # AppInfoWidget orqali yuklanish vaqtini ko'rsatamiz
             info_widget = AppInfoWidget(
                 name=name_text,
                 icon=icon,
-                version=entry.boot_time if entry.boot_time else "Yuklanish vaqti: Aniqlanmadi",
+                version=entry.boot_time if entry.boot_time else tr("autostart.boot_unknown"),
                 size="",
                 date="",
             )
             
             name_item = QTableWidgetItem("")
             name_item.setToolTip(
-                f"Fayl: {entry.desktop_path}\n"
-                f"{'Tizim darajasi' if entry.is_system else 'Foydalanuvchi darajasi'}"
+                f"{tr('autostart.file')}: {entry.desktop_path}\n"
+                f"{tr('autostart.system_level') if entry.is_system else tr('autostart.user_level')}"
             )
             name_item.setData(Qt.ItemDataRole.UserRole, entry)
             self._autostart_table.setItem(row, 0, name_item)
             self._autostart_table.setCellWidget(row, 0, info_widget)
 
             # Holati (checkbox)
-            checkbox = QCheckBox("Yoqilgan" if entry.enabled else "O'chirilgan")
+            checkbox = QCheckBox(tr("autostart.enabled") if entry.enabled else tr("autostart.disabled"))
             checkbox.setChecked(entry.enabled)
             checkbox.setStyleSheet("padding-left: 12px;")
             checkbox.toggled.connect(partial(self._on_toggle_autostart, entry))
@@ -775,12 +897,12 @@ class MainWindow(QMainWindow):
         """Dasturni ishga tushiradi."""
         success, message = launch_app(app)
         if success:
-            self._status_bar.showMessage(f"▶ «{app.name}» ishga tushirildi", 3000)
+            self._status_bar.showMessage(tr("launch.success", name=app.name), 3000)
         else:
             QMessageBox.warning(
                 self,
-                "Ishga tushirish",
-                f"«{app.name}» ishga tushirilmadi:\n\n{message}",
+                tr("launch.title"),
+                tr("launch.failed", name=app.name, message=message),
             )
 
     def _on_update_app(self, app: App, source_dialog: AppDetailDialog | None = None) -> None:
@@ -796,12 +918,12 @@ class MainWindow(QMainWindow):
         elif app.source == "flatpak":
             update_func = update_flatpak_app
         else:
-            self._status_bar.showMessage(f"⚠️ {app.source} uchun yangilash qo'llab-quvvatlanmaydi", 5000)
+            self._status_bar.showMessage(tr("update.unsupported", source=app.source.upper()), 5000)
             return
 
         self._updating_apps.add(app.identifier)
         self._populate_apps_table()
-        self._status_bar.showMessage(f"⬆️ «{app.name}» yangilanmoqda...")
+        self._status_bar.showMessage(tr("update.running", name=app.name))
         self._pulse_status_bar(True)
 
         if source_dialog:
@@ -821,13 +943,13 @@ class MainWindow(QMainWindow):
         if success:
             app.has_update = False
             app.new_version = ""
-            msg = f"«{app.name}» muvaffaqiyatli yangilandi"
+            msg = tr("update.success", name=app.name)
             self._status_bar.showMessage(f"✓ {msg}", 5000)
             self._success_flash.flash()
         else:
-            msg = f"«{app.name}» yangilanishida xatolik yuz berdi"
+            msg = tr("update.failed", name=app.name)
             self._status_bar.showMessage(f"✗ {msg}", 5000)
-            self._add_error(f"Yangilash xatoligi: «{app.name}» ({app.source}) yangilanmadi.")
+            self._add_error(tr("update.error_log", name=app.name, source=app.source))
         if source_dialog:
             source_dialog.finish_operation(success, msg)
         self._populate_apps_table()
@@ -837,10 +959,8 @@ class MainWindow(QMainWindow):
         # Tasdiqlash dialogi
         reply = QMessageBox.question(
             self,
-            "Dasturni o'chirish",
-            f"«{app.name}» dasturini butunlay o'chirmoqchimisiz?\n\n"
-            f"Manba: {app.source.upper()}\n"
-            f"Identifikator: {app.identifier}",
+            tr("remove.title"),
+            tr("remove.question", name=app.name, source=app.source.upper(), identifier=app.identifier),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -853,10 +973,8 @@ class MainWindow(QMainWindow):
             if binary:
                 bin_reply = QMessageBox.question(
                     self,
-                    "Binary faylni ham o'chirish",
-                    f"Binary fayl ham topildi:\n{binary}\n\n"
-                    "Uni ham o'chirmoqchimisiz?\n"
-                    "(Faqat .desktop fayl o'chirilsa, dastur havolasiz qoladi)",
+                    tr("remove.binary_title"),
+                    tr("remove.binary_question", binary=binary),
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                     QMessageBox.StandardButton.No,
                 )
@@ -878,7 +996,7 @@ class MainWindow(QMainWindow):
 
             self._removing_apps.add(app.identifier)
             self._populate_apps_table()
-            self._status_bar.showMessage(f"🗑️ «{app.name}» o'chirilmoqda...")
+            self._status_bar.showMessage(tr("remove.running", name=app.name))
             self._pulse_status_bar(True)
             if source_dialog:
                 source_dialog.start_operation("remove", f"«{app.name}» o'chirilmoqda...")
@@ -897,7 +1015,7 @@ class MainWindow(QMainWindow):
         }
         func = remove_funcs.get(app.source)
         if not func:
-            self._status_bar.showMessage(f"⚠️  Noma'lum manba: {app.source}", 5000)
+            self._status_bar.showMessage(tr("remove.unknown_source", source=app.source), 5000)
             return
 
         # Background thread'da o'chirish
@@ -932,14 +1050,14 @@ class MainWindow(QMainWindow):
         else:
             self._populate_apps_table()
             self._status_bar.showMessage(f"⚠️  {message}", 8000)
-            self._add_error(f"O'chirish xatoligi: «{app.name}» — {message}")
+            self._add_error(tr("remove.error_log", name=app.name, message=message))
             if source_dialog:
                 source_dialog.finish_operation(False, message)
             else:
                 QMessageBox.warning(
                     self,
-                    "O'chirishda xatolik",
-                    f"«{app.name}» o'chirilmadi:\n\n{message}",
+                    tr("remove.error_title"),
+                    tr("remove.failed", name=app.name, message=message),
                 )
 
     def _remove_binary_file(self, binary_path: str) -> None:
@@ -975,10 +1093,9 @@ class MainWindow(QMainWindow):
 
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "O'rnatish uchun faylni tanlang",
+            tr("install.file_title"),
             os.path.expanduser("~/Downloads"),
-            "O'rnatish fayllari (*.AppImage *.appimage *.deb *.tar.xz *.tar.gz *.zip);;"
-            "Barcha fayllar (*)",
+            tr("install.file_filter"),
         )
         if not file_path:
             return
@@ -998,7 +1115,7 @@ class MainWindow(QMainWindow):
             self._install_dialog.close()
 
         dialog = QDialog(self)
-        dialog.setWindowTitle("Fayldan o'rnatish")
+        dialog.setWindowTitle(tr("install.dialog_title"))
         dialog.setMinimumSize(560, 360)
         dialog.setModal(False)
 
@@ -1010,7 +1127,7 @@ class MainWindow(QMainWindow):
         title.setStyleSheet(f"color: {colors()['text']};")
         layout.addWidget(title)
 
-        self._install_status_label = TextSpinnerLabel("O'rnatish boshlanmoqda...")
+        self._install_status_label = TextSpinnerLabel(tr("install.starting"))
         self._install_status_label.setStyleSheet(
             f"color: {colors()['success']}; font-size: 13px; font-weight: 600;"
         )
@@ -1028,7 +1145,7 @@ class MainWindow(QMainWindow):
         self._install_terminal.setMinimumHeight(200)
         layout.addWidget(self._install_terminal)
 
-        close_btn = QPushButton("Yopish")
+        close_btn = QPushButton(tr("install.close"))
         close_btn.setEnabled(False)
         close_btn.clicked.connect(dialog.close)
         self._install_close_btn = close_btn
@@ -1036,7 +1153,7 @@ class MainWindow(QMainWindow):
 
         self._install_dialog = dialog
         dialog.show()
-        self._status_bar.showMessage(f"⏳  '{filename}' o'rnatilmoqda...")
+        self._status_bar.showMessage(tr("install.running", filename=filename))
 
     def _on_install_progress(self, message: str) -> None:
         """O'rnatish bosqichi yangilanganda."""
@@ -1062,7 +1179,7 @@ class MainWindow(QMainWindow):
 
         if hasattr(self, "_install_status_label"):
             self._install_status_label.stop()
-            status = "✓ O'rnatish muvaffaqiyatli yakunlandi" if success else "✗ O'rnatishda xatolik"
+            status = tr("install.success") if success else tr("install.failed")
             self._install_status_label.setText(status)
             c = colors()
             self._install_status_label.setStyleSheet(
@@ -1084,11 +1201,11 @@ class MainWindow(QMainWindow):
             self._start_scan()
         else:
             self._status_bar.showMessage(f"⚠️  {message}", 8000)
-            self._add_error(f"Fayldan o'rnatish xatoligi: {message}")
+            self._add_error(tr("install.error_log", message=message))
             QMessageBox.warning(
                 self,
-                "O'rnatish xatoligi",
-                f"Fayl o'rnatilmadi:\n\n{message}",
+                tr("install.error_title"),
+                tr("install.error_message", message=message),
             )
 
     def _on_toggle_autostart(self, entry: AutostartEntry, checked: bool) -> None:
@@ -1106,13 +1223,11 @@ class MainWindow(QMainWindow):
 
     def _on_remove_autostart(self, entry: AutostartEntry) -> None:
         """Avtoishga tushish yozuvini olib tashlash."""
-        desc = "tizim darajasida yashiriladi" if entry.is_system else "o'chiriladi"
+        desc = tr("autostart.hide_system") if entry.is_system else tr("autostart.delete")
         reply = QMessageBox.question(
             self,
-            "Avtoishga tushish yozuvini olib tashlash",
-            f"«{entry.name}» avtoishga tushish ro'yxatidan olib tashlansinmi?\n\n"
-            f"Fayl: {entry.desktop_path}\n"
-            f"Amal: {desc}",
+            tr("autostart.remove_title"),
+            tr("autostart.remove_question", name=entry.name, path=entry.desktop_path, action=desc),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -1127,8 +1242,8 @@ class MainWindow(QMainWindow):
             self._status_bar.showMessage(f"⚠️  {message}", 5000)
             QMessageBox.warning(
                 self,
-                "Xatolik",
-                f"Olib tashlashda xatolik:\n\n{message}",
+                tr("error.title"),
+                tr("autostart.remove_error", message=message),
             )
 
     def _on_remove_autostart_finished(self, entry: AutostartEntry, success: bool, message: str) -> None:
@@ -1138,11 +1253,11 @@ class MainWindow(QMainWindow):
             self._start_scan()
         else:
             self._status_bar.showMessage(f"⚠️  {message}", 8000)
-            self._add_error(f"Avtoishga tushish yozuvini o'chirish xatoligi: «{entry.name}» — {message}")
+            self._add_error(tr("autostart.remove_error_log", name=entry.name, message=message))
             QMessageBox.warning(
                 self,
-                "O'chirishda xatolik",
-                f"«{entry.name}» o'chirilmadi:\n\n{message}",
+                tr("remove.error_title"),
+                tr("remove.failed", name=entry.name, message=message),
             )
 
     # ── Tozalash ───────────────────────────────────────────────────────────
@@ -1159,16 +1274,16 @@ class MainWindow(QMainWindow):
         do_journal = self._chk_journal.isChecked()
 
         if not any([do_apt_cache, do_apt_autoremove, do_apt_leftovers, do_flatpak, do_journal]):
-            QMessageBox.information(self, "Ma'lumot", "Iltimos, tozalash uchun kamida bitta variantni tanlang.")
+            QMessageBox.information(self, tr("cleaner.no_options_title"), tr("cleaner.no_options"))
             return
 
         # Terminalni tozalaymiz
         self._clean_terminal.clear()
-        self._clean_terminal.insertPlainText("Tozalash jarayoni boshlanmoqda...\n\n")
+        self._clean_terminal.insertPlainText(tr("cleaner.started_terminal"))
 
         self._start_clean_btn.setEnabled(False)
-        self._start_clean_btn.setText("  Tozalanmoqda...")
-        self._status_bar.showMessage("Tozalash boshlandi...")
+        self._start_clean_btn.setText(f"  {tr('cleaner.busy')}")
+        self._status_bar.showMessage(tr("cleaner.started"))
 
         self._clean_worker = CleanWorker(
             do_apt_cache=do_apt_cache,
@@ -1194,7 +1309,7 @@ class MainWindow(QMainWindow):
         self._status_bar.showMessage(f"⏳  {message}")
 
     def _on_clean_error(self, message: str) -> None:
-        self._add_error(f"Tozalash xatoligi: {message}")
+        self._add_error(tr("cleaner.error_log", message=message))
 
     def _on_clean_finished_step(self, success: bool, message: str) -> None:
         # Har qadam tugaganda status barni yangilab turamiz
@@ -1202,9 +1317,9 @@ class MainWindow(QMainWindow):
 
     def _on_clean_finished_all(self) -> None:
         self._start_clean_btn.setEnabled(True)
-        self._start_clean_btn.setText("  Tozalashni boshlash")
-        self._status_bar.showMessage("✓ Tozalash jarayoni to'liq yakunlandi!", 8000)
-        QMessageBox.information(self, "Tozalash yakunlandi", "Tanlangan barcha qismlar tozalandi!")
+        self._start_clean_btn.setText(f"  {tr('cleaner.start')}")
+        self._status_bar.showMessage(tr("cleaner.done_status"), 8000)
+        QMessageBox.information(self, tr("cleaner.done_title"), tr("cleaner.done"))
 
     # ── Yordamchi ──────────────────────────────────────────────────────────
 
@@ -1252,13 +1367,13 @@ class MainWindow(QMainWindow):
         
         # Tab nomini yangilash (agar xatoliklar bo'lsa)
         count = len(self._errors)
-        self._tabs.setTabText(self._TAB_ERRORS, f"Xatoliklar ({count})")
+        self._tabs.setTabText(self._TAB_ERRORS, self._errors_tab_title())
 
     def _clear_errors(self) -> None:
         """Xatoliklar ro'yxatini tozalaydi."""
         self._errors.clear()
         self._errors_list.clear()
-        self._tabs.setTabText(self._TAB_ERRORS, "Xatoliklar")
+        self._tabs.setTabText(self._TAB_ERRORS, self._errors_tab_title())
 
     def _pulse_status_bar(self, active: bool) -> None:
         """Status bar matnini pulsatsiya qilish."""

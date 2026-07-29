@@ -54,6 +54,7 @@ class SectionHeader(QWidget):
         text_col.setSpacing(2)
 
         title_label = QLabel(title)
+        self._title_label = title_label
         title_label.setObjectName("sectionTitle")
         title_label.setFont(system_ui_font(13, bold=True))
         title_label.setStyleSheet(f"color: {c['text']};")
@@ -61,13 +62,21 @@ class SectionHeader(QWidget):
 
         if subtitle:
             sub_label = QLabel(subtitle)
+            self._sub_label = sub_label
             sub_label.setObjectName("sectionSubtitle")
             sub_label.setWordWrap(True)
             sub_label.setFont(system_ui_font(11))
             sub_label.setStyleSheet(f"color: {c['text_secondary']};")
             text_col.addWidget(sub_label)
+        else:
+            self._sub_label = None
 
         layout.addLayout(text_col, stretch=1)
+
+    def set_text(self, title: str, subtitle: str = "") -> None:
+        self._title_label.setText(title)
+        if self._sub_label is not None:
+            self._sub_label.setText(subtitle)
 
 
 class InfoBanner(QFrame):

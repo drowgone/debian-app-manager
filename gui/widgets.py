@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QFont, QIcon
 
+from gui.i18n import tr
 from gui.theme import colors, system_ui_font, build_stylesheet
 
 
@@ -69,7 +70,7 @@ SOURCE_COLORS = {
     "snap":     {"bg": "#e95420", "text": "#ffffff", "label": "Snap"},
     "flatpak":  {"bg": "#4a86cf", "text": "#ffffff", "label": "Flatpak"},
     "appimage": {"bg": "#555555", "text": "#ffffff", "label": "AppImage"},
-    "manual":   {"bg": "#77767b", "text": "#ffffff", "label": "Qo'lda"},
+    "manual":   {"bg": "#77767b", "text": "#ffffff", "label": "source.manual"},
 }
 
 
@@ -79,7 +80,8 @@ class SourceBadge(QLabel):
     def __init__(self, source: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         src = SOURCE_COLORS.get(source, SOURCE_COLORS["manual"])
-        self.setText(f" {src['label']} ")
+        label = tr(src["label"]) if src["label"].startswith("source.") else src["label"]
+        self.setText(f" {label} ")
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setFont(system_ui_font(9, bold=True))
         self.setStyleSheet(
@@ -95,7 +97,7 @@ class RemoveButton(QPushButton):
     """O'chirish tugmasi."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__("O'chirish", parent)
+        super().__init__(tr("button.remove"), parent)
         self.setFixedSize(90, 28)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         c = colors()
@@ -122,7 +124,7 @@ class AutostartRemoveButton(QPushButton):
     """Avtoishga tushish yozuvini o'chirish tugmasi."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__("Olib tashlash", parent)
+        super().__init__(tr("button.autostart_remove"), parent)
         self.setFixedSize(110, 28)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         c = colors()
@@ -178,9 +180,9 @@ class UpdateBadge(QLabel):
     def __init__(self, new_version: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         c = colors()
-        self.setText(" Yangilanish ")
+        self.setText(f" {tr('badge.update')} ")
         if new_version:
-            self.setToolTip(f"Yangi versiya:\n{new_version}")
+            self.setToolTip(tr("badge.update_tip", version=new_version))
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setFont(system_ui_font(9, bold=True))
         self.setStyleSheet(
@@ -197,7 +199,7 @@ class LaunchButton(QPushButton):
     """Dasturni ishga tushirish tugmasi."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__("Ishga tushirish", parent)
+        super().__init__(tr("button.launch"), parent)
         self.setFixedSize(120, 28)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         c = colors()
@@ -228,7 +230,7 @@ class UpdateButton(QPushButton):
     """Yangilash tugmasi."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__("Yangilash", parent)
+        super().__init__(tr("button.update"), parent)
         self.setFixedSize(90, 28)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         c = colors()
