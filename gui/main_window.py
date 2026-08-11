@@ -69,6 +69,8 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(
             QIcon.fromTheme("system-software-install", QIcon.fromTheme("applications-system"))
         )
+        # Drag and drop ni yoqish
+        self.setAcceptDrops(True)
 
         # Ma'lumotlar
         self._apps: list[App] = []
@@ -214,6 +216,15 @@ class MainWindow(QMainWindow):
         self._language_combo.currentIndexChanged.connect(self._on_language_changed)
         layout.addWidget(self._language_combo)
 
+        # Mavzu Toggle tugmasi (Quyosh / Oy)
+        from gui.theme import get_theme_mode, set_theme_mode, is_dark_mode
+        self._theme_toggle_btn = QPushButton()
+        self._theme_toggle_btn.setFixedSize(36, 36)
+        self._theme_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._theme_toggle_btn.clicked.connect(self._toggle_theme_mode)
+        self._update_theme_toggle_icon()
+        layout.addWidget(self._theme_toggle_btn)
+
         self._refresh_btn = QPushButton(f"  {tr('refresh')}")
         self._refresh_btn.setObjectName("refreshBtn")
         self._refresh_btn.setIcon(QIcon.fromTheme(ACTION_ICONS["refresh"]))
@@ -222,6 +233,34 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._refresh_btn)
 
         return header
+
+    def _update_theme_toggle_icon(self) -> None:
+        """Mavzu rejimiga qarab Quyosh/Oy ikonkasini va tooltipni yangilaydi."""
+        from gui.theme import is_dark_mode
+        if is_dark_mode():
+            # Qorong'u bo'lsa Quyosh ikonka (yorug'ga o'tish uchun)
+            icon = QIcon.fromTheme("weather-clear-symbolic", QIcon.fromTheme("sunny"))
+            self._theme_toggle_btn.setIcon(icon)
+            self._theme_toggle_btn.setToolTip("Yorug' mavzuga o'tish")
+        else:
+            # Yorug' bo'lsa Oy ikonka (qorong'uga o'tish uchun)
+            icon = QIcon.fromTheme("weather-clear-night-symbolic", QIcon.fromTheme("night"))
+            self._theme_toggle_btn.setIcon(icon)
+            self._theme_toggle_btn.setToolTip("Qorong'u mavzuga o'tish")
+
+    def _toggle_theme_mode(self) -> None:
+        """Mavzuni foydalanuvchi tanlaganiga qarab almashtiradi."""
+        from gui.theme import is_dark_mode, set_theme_mode
+        current_dark = is_dark_mode()
+        if current_dark:
+            set_theme_mode("light")
+        else:
+            set_theme_mode("dark")
+
+        # Oyna va barcha widgetlar uslubini (stylesheet) yangilash
+        self.setStyleSheet(build_stylesheet())
+        self._update_theme_toggle_icon()
+        self._apply_language()  # jadval va widget ranglarini qayta bo'yash
 
     def _on_language_changed(self, index: int) -> None:
         """Language selector changed — update the UI and persist the choice."""
@@ -309,7 +348,8 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_start_clean_btn"):
             self._start_clean_btn.setText(f"  {tr('cleaner.start')}")
         if hasattr(self, "_cleaner_header"):
-            self._cleaner_header.set_text(tr("cleaner.header"), tr("cleaner.subtitle"))
+            self._cleaner_header.set_text(tr("cleaner.header"), tr("cleaner.subtitle"), tr("cleaner.info"))
+            self._autostart_header.set_text(tr("autostart.header"), tr("autostart.subtitle"), tr("autostart.info"))
         if hasattr(self, "_app_count_label") and self._apps:
             self._populate_apps_table()
         if hasattr(self, "_autostart_table") and self._autostart_entries:
@@ -429,24 +469,16 @@ class MainWindow(QMainWindow):
             tr("autostart.header"),
             tr("autostart.subtitle"),
             "system-run-symbolic",
+            tr("autostart.info"),
         )
         layout.addWidget(self._autostart_header)
 
         self._boot_info_label = QLabel(
-            tr("autostart.info")
+            tr("boot.not_found")
         )
-        self._boot_info_label.setObjectName("infoBannerText")
         self._boot_info_label.setWordWrap(True)
-        boot_info = InfoBanner("")
-        boot_info_layout = boot_info.layout()
-        if boot_info_layout is not None:
-            old_item = boot_info_layout.itemAt(1)
-            if old_item is not None:
-                old_label = old_item.widget()
-                if old_label is not None:
-                    boot_info_layout.replaceWidget(old_label, self._boot_info_label)
-                    old_label.deleteLater()
-        layout.addWidget(boot_info)
+        self._boot_info_label.setStyleSheet("padding: 8px 12px; background-color: transparent;")
+        layout.addWidget(self._boot_info_label)
 
         # Jadval
         self._autostart_table = QTableWidget()
@@ -487,7 +519,7 @@ class MainWindow(QMainWindow):
         return widget
 
     def _create_cleaner_tab(self) -> QWidget:
-        """Tozalash tab'ini yaratadi."""
+        """Tozalash tab'ini yaratadi (Katta banner Hover Info ga o'zgartirildi)."""
         c = colors()
         widget = QWidget()
         layout = QVBoxLayout(widget)
@@ -498,12 +530,9 @@ class MainWindow(QMainWindow):
             tr("cleaner.header"),
             tr("cleaner.subtitle"),
             "edit-clear-all-symbolic",
+            tr("cleaner.info"),
         )
         layout.addWidget(self._cleaner_header)
-
-        layout.addWidget(InfoBanner(
-            tr("cleaner.info")
-        ))
 
         options_card = CardFrame()
         options_layout = options_card._layout
@@ -674,6 +703,12 @@ class MainWindow(QMainWindow):
                 count += 1
         self._pulse_status_bar(False)
         self._populate_apps_table()
+
+        # Tab sarlavhasiga yangilanishlar sonini qo'shish
+        if count > 0:
+            self._tabs.setTabText(self._TAB_APPS, f"{tr('tabs.apps')} ({count})")
+        else:
+            self._tabs.setTabText(self._TAB_APPS, tr("tabs.apps"))
 
         if animated:
             self._scan_overlay.hide_operation()
@@ -935,11 +970,22 @@ class MainWindow(QMainWindow):
         if source_dialog:
             source_dialog.start_operation("update", f"«{app.name}» yangilanmoqda...")
 
-        self._update_worker = UpdateWorker(update_func, app.identifier, self)
+        self._update_worker = UpdateWorker(update_func, app.identifier, app.source, self)
         self._update_worker.finished.connect(
             partial(self._on_update_finished, app, source_dialog)
         )
+        self._update_worker.progress_updated.connect(
+            partial(self._on_update_progress, app, source_dialog)
+        )
         self._update_worker.start()
+
+    def _on_update_progress(
+        self, app: App, source_dialog: AppDetailDialog | None, progress_text: str
+    ) -> None:
+        """Yangilanish jarayonidagi real vaqt progressini progress bar va status barda ko'rsatish."""
+        self._status_bar.showMessage(tr("update.running", name=app.name) + f" - {progress_text}")
+        if source_dialog:
+            source_dialog.update_progress_text(progress_text)
 
     def _on_update_finished(
         self, app: App, source_dialog: AppDetailDialog | None, success: bool
@@ -1399,3 +1445,59 @@ class MainWindow(QMainWindow):
             self._status_pulse.start()
         elif self._status_pulse is not None:
             self._status_pulse.stop()
+
+    # ── Drag & Drop Event Handlers ──────────────────────────────────────────
+
+    def dragEnterEvent(self, event) -> None:
+        """Fayl sudrab kelinganda uni tekshiradi."""
+        mime = event.mimeData()
+        if mime.hasUrls():
+            urls = mime.urls()
+            if urls:
+                path = urls[0].toLocalFile()
+                if path.lower().endswith((".deb", ".appimage")):
+                    event.acceptProposedAction()
+
+    def dropEvent(self, event) -> None:
+        """Fayl tashlanganda uni o'rnatadi/yangilaydi."""
+        mime = event.mimeData()
+        if mime.hasUrls():
+            urls = mime.urls()
+            if urls:
+                file_path = urls[0].toLocalFile()
+                if os.path.isfile(file_path):
+                    self._handle_dropped_file(file_path)
+
+    def _handle_dropped_file(self, file_path: str) -> None:
+        """Sudrab tashlangan faylni o'rnatish yoki mavjudini yangilash."""
+        filename = os.path.basename(file_path)
+
+        # Agar AppImage bo'lsa, eskisini o'chirib yangilash
+        if filename.lower().endswith(".appimage"):
+            from core.appimage_manager import APPIMAGE_DIR
+            dest_path = os.path.join(APPIMAGE_DIR, filename)
+
+            # Agar shu nomli AppImage allaqachon mavjud bo'lsa (Update/Overwrite)
+            if os.path.exists(dest_path):
+                reply = QMessageBox.question(
+                    self,
+                    "AppImage Yangilash",
+                    f"«{filename}» allaqachon mavjud. Uni yangi versiyaga yangilaymizmi? (Eski fayl o'chiriladi)",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes
+                )
+                if reply == QMessageBox.StandardButton.Yes:
+                    try:
+                        # Eskisini o'chirish
+                        os.remove(dest_path)
+                    except Exception as e:
+                        self._add_error(f"Eski AppImage faylini o'chirishda xatolik: {e}")
+
+        self._show_install_dialog(filename)
+        self._install_file_btn.setEnabled(False)
+
+        self._install_worker = InstallWorker(file_path, self)
+        self._install_worker.progress.connect(self._on_install_progress)
+        self._install_worker.terminal_output.connect(self._on_install_terminal_output)
+        self._install_worker.finished.connect(self._on_install_finished)
+        self._install_worker.start()

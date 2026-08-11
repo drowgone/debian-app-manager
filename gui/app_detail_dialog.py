@@ -249,6 +249,11 @@ class AppDetailDialog(QDialog):
         self._status_label.start()
         self._progress_container.show()
 
+    def update_progress_text(self, progress_text: str) -> None:
+        """Yangilanish progress matnini real vaqt rejimida yangilaydi (masalan, 45% (12 MB / 25 MB))."""
+        self._status_label.setText(f"⌛ {progress_text}")
+        self._progress_bar.setFormat(progress_text)
+
     def finish_operation(
         self, success: bool, message: str, *, auto_close: bool = False
     ) -> None:

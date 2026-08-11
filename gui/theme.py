@@ -92,8 +92,33 @@ def configure_display_quality() -> None:
     )
 
 
+from PySide6.QtCore import QSettings
+
+_settings = QSettings("Donegrow", "DebianAppManager")
+_theme_mode = _settings.value("theme_mode", "auto")  # "auto" | "light" | "dark"
+
+def set_theme_mode(mode: str) -> None:
+    """Mavzu rejimini o'rnatadi va saqlaydi ("auto", "light", "dark")."""
+    global _theme_mode
+    if mode in ("auto", "light", "dark"):
+        _theme_mode = mode
+        _settings.setValue("theme_mode", mode)
+
+
+def get_theme_mode() -> str:
+    """Joriy mavzu rejimini qaytaradi ("auto", "light", "dark")."""
+    return str(_theme_mode)
+
+
 def is_dark_mode() -> bool:
-    """Tizim yorug'/qorong'u rejimini aniqlaydi."""
+    """Tizim yoki foydalanuvchi tanlagan yorug'/qorong'u rejimini aniqlaydi."""
+    mode = get_theme_mode()
+    if mode == "dark":
+        return True
+    if mode == "light":
+        return False
+
+    # Auto bo'lsa tizimga qarab aniqlash
     app = QGuiApplication.instance()
     if app is None or not hasattr(app, "palette"):
         return False
