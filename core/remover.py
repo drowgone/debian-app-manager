@@ -27,6 +27,16 @@ _FORBIDDEN_PREFIXES = (
     "/boot/",
 )
 
+# ── Taqiqlangan foydalanuvchi shaxsiy maxfiy papkalari ────────────────────
+_FORBIDDEN_USER_SUBDIRS = (
+    "/.ssh",
+    "/.gnupg",
+    "/.config",
+    "/.local/share/keyrings",
+    "/.mozilla",
+    "/.thunderbird",
+)
+
 
 def _is_safe_path(path: str) -> bool:
     """Fayl yo'li xavfsiz o'chirish uchun mos ekanini tekshiradi."""
@@ -35,6 +45,12 @@ def _is_safe_path(path: str) -> bool:
     # Taqiqlangan papkalarga tegmaslik
     for prefix in _FORBIDDEN_PREFIXES:
         if real_path.startswith(prefix):
+            return False
+
+    # Uy papkasidagi o'ta maxfiy papkalarni himoya qilish
+    for forbidden_sub in _FORBIDDEN_USER_SUBDIRS:
+        forbidden_path = os.path.expanduser("~" + forbidden_sub)
+        if real_path == forbidden_path or real_path.startswith(forbidden_path + os.sep):
             return False
 
     # Faqat ruxsat etilgan papkalardan o'chirish
@@ -196,29 +212,42 @@ def get_manual_app_binary(desktop_path: str) -> str | None:
     Faqat /opt/ yoki foydalanuvchi uy papkasidagi binarylar qaytariladi.
     """
     from core.desktop_parser import parse_desktop_entry
+    import shlex
 
     entry = parse_desktop_entry(desktop_path)
     exec_line = entry.get("Exec", "")
     if not exec_line:
         return None
 
-    # Exec satridan birinchi buyruqni ajratish
-    # Exec=env VAR=val /path/to/binary --arg tarzida bo'lishi mumkin
-    parts = exec_line.split()
+    # shlex yordamida tirnoq ichidagi elementlarni to'g'ri parse qilamiz
+    try:
+        parts = shlex.split(exec_line)
+    except ValueError:
+        parts = exec_line.split()
+
     binary_path = None
 
     for part in parts:
-        if part.startswith("/"):
-            binary_path = part
-            break
-        if "=" in part or part == "env":
+        # env buyrug'ini va uning o'zgaruvchilarini (VAR=val) o'tkazib yuborish
+        if part == "env" or "=" in part:
             continue
-        # Nisbiy yo'l — which bilan topish
+        # desktop field code'larini (%u, %F va h.k.) o'tkazib yuborish
+        if part.startswith("%"):
+            continue
         binary_path = part
         break
 
-    if not binary_path or not os.path.isabs(binary_path):
+    if not binary_path:
         return None
+
+    # Agar yo'l absolyut bo'lmasa, which orqali izlaymiz
+    if not os.path.isabs(binary_path):
+        import shutil
+        found = shutil.which(binary_path)
+        if found:
+            binary_path = found
+        else:
+            return None
 
     real_binary = os.path.realpath(binary_path)
 

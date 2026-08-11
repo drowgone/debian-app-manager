@@ -236,8 +236,9 @@ class OperationOverlay(QFrame):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
-        if self.parentWidget():
-            self.setGeometry(self.parentWidget().rect())
+        parent = self.parentWidget()
+        if parent is not None:
+            self.setGeometry(parent.rect())
 
 
 # ── Animatsiyali progress bar ──────────────────────────────────────────────────
@@ -417,8 +418,9 @@ class SuccessFlash(QWidget):
         self.hide()
 
     def flash(self, duration_ms: int = 600) -> None:
-        if self.parentWidget():
-            self.setGeometry(self.parentWidget().rect())
+        parent = self.parentWidget()
+        if parent is not None:
+            self.setGeometry(parent.rect())
         self.show()
         self.raise_()
 

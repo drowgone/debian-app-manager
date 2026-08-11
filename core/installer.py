@@ -93,7 +93,7 @@ def _run_and_stream(
                 if line:
                     _log(log_callback, line + "\n")
                     output_lines.append(line)
-        process.stdout.close()
+            process.stdout.close()
         return_code = process.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
         process.kill()
@@ -158,6 +158,14 @@ def _safe_extract_zip(zip_ref: zipfile.ZipFile, dest_dir: str) -> None:
     for member in zip_ref.infolist():
         if not _is_safe_member_path(dest_dir, member.filename):
             raise zipfile.BadZipFile(f"Xavfli yo'l aniqlandi: {member.filename}")
+    # Symlink traversal/creation himoyasi
+    for member in zip_ref.infolist():
+        # Zip slip va symlink orqali zararli link yaratilishidan himoya qilish
+        target_path = os.path.abspath(os.path.join(dest_dir, member.filename))
+        # Agar a'zo symlink bo'lsa yoki symlinkka o'xshasa, xavfsizlik uchun rad etamiz
+        # Zip file attributes dagi symlink bitini tekshirish:
+        if (member.external_attr >> 16) & 0o120000 == 0o120000:
+            raise zipfile.BadZipFile(f"Symlink arxiv ichida taqiqlangan: {member.filename}")
     zip_ref.extractall(dest_dir)
 
 
@@ -165,6 +173,12 @@ def _safe_extract_tar(tar_ref: tarfile.TarFile, dest_dir: str) -> None:
     for member in tar_ref.getmembers():
         if not _is_safe_member_path(dest_dir, member.name):
             raise tarfile.TarError(f"Xavfli yo'l aniqlandi: {member.name}")
+        # Symlink va hardlink traversal himoyasi
+        if member.issym() or member.islnk():
+            # Agar link tashqariga yo'naltirilsa rad etamiz
+            link_target = member.linkname
+            if os.path.isabs(link_target) or ".." in link_target:
+                raise tarfile.TarError(f"Zararli havola aniqlandi: {member.name} -> {link_target}")
 
     extract_kwargs: dict = {}
     if hasattr(tarfile, "data_filter"):
