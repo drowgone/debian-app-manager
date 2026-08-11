@@ -234,12 +234,16 @@ class AppDetailDialog(QDialog):
         self._close_btn.setEnabled(False)
 
         layout = self._progress_container.layout()
-        old_bar = layout.itemAt(1).widget()
-        new_bar = AnimatedProgressBar(operation)
-        new_bar.setFixedHeight(26)
-        layout.replaceWidget(old_bar, new_bar)
-        old_bar.deleteLater()
-        self._progress_bar = new_bar
+        if layout is not None:
+            old_item = layout.itemAt(1)
+            if old_item is not None:
+                old_bar = old_item.widget()
+                if old_bar is not None:
+                    new_bar = AnimatedProgressBar(operation)
+                    new_bar.setFixedHeight(26)
+                    layout.replaceWidget(old_bar, new_bar)
+                    old_bar.deleteLater()
+                    self._progress_bar = new_bar
 
         self._status_label.set_text(message)
         self._status_label.start()

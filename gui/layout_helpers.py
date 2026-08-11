@@ -60,16 +60,15 @@ class SectionHeader(QWidget):
         title_label.setStyleSheet(f"color: {c['text']};")
         text_col.addWidget(title_label)
 
-        if subtitle:
-            sub_label = QLabel(subtitle)
-            self._sub_label = sub_label
-            sub_label.setObjectName("sectionSubtitle")
-            sub_label.setWordWrap(True)
-            sub_label.setFont(system_ui_font(11))
-            sub_label.setStyleSheet(f"color: {c['text_secondary']};")
-            text_col.addWidget(sub_label)
-        else:
-            self._sub_label = None
+        sub_label = QLabel(subtitle)
+        self._sub_label = sub_label
+        sub_label.setObjectName("sectionSubtitle")
+        sub_label.setWordWrap(True)
+        sub_label.setFont(system_ui_font(11))
+        sub_label.setStyleSheet(f"color: {c['text_secondary']};")
+        text_col.addWidget(sub_label)
+        if not subtitle:
+            sub_label.hide()
 
         layout.addLayout(text_col, stretch=1)
 

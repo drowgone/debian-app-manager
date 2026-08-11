@@ -94,8 +94,8 @@ def configure_display_quality() -> None:
 
 def is_dark_mode() -> bool:
     """Tizim yorug'/qorong'u rejimini aniqlaydi."""
-    app = QApplication.instance()
-    if app is None:
+    app = QGuiApplication.instance()
+    if app is None or not hasattr(app, "palette"):
         return False
     palette = app.palette()
     window = palette.color(QPalette.ColorRole.Window)

@@ -29,8 +29,7 @@ def _run_and_stream(cmd: list[str], log_callback: Callable[[str], None] | None =
                     if log_callback:
                         log_callback(line + "\n")
                     output_lines.append(line)
-        
-        process.stdout.close()
+            process.stdout.close()
         return_code = process.wait()
         
         if return_code == 0:
@@ -76,7 +75,11 @@ def clean_apt_leftovers(log_callback: Callable[[str], None] | None = None) -> tu
             if line.startswith("rc "):
                 parts = line.split()
                 if len(parts) >= 2:
-                    leftover_packages.append(parts[1])
+                    pkg_name = parts[1]
+                    # Xavfsizlik: faqat ruxsat berilgan alfanumerik paket nomlarini qabul qilish (shell injection ga qarshi qo'shimcha to'siq)
+                    clean_pkg = pkg_name.replace("-", "").replace(".", "").replace("+", "").replace(":", "")
+                    if clean_pkg.isalnum():
+                        leftover_packages.append(pkg_name)
         
         if not leftover_packages:
             if log_callback:

@@ -77,8 +77,8 @@ class MainWindow(QMainWindow):
         self._scan_worker: ScanWorker | None = None
         self._update_check_worker: UpdateCheckWorker | None = None
         self._update_worker: UpdateWorker | None = None
-        self._updating_apps = set()  # app identifiers currently updating
-        self._removing_apps = set()  # app identifiers currently removing
+        self._updating_apps: set[str] = set()  # app identifiers currently updating
+        self._removing_apps: set[str] = set()  # app identifiers currently removing
         self._remove_worker: RemoveWorker | None = None
         self._clean_worker: CleanWorker | None = None
         self._install_worker: InstallWorker | None = None
@@ -439,9 +439,13 @@ class MainWindow(QMainWindow):
         self._boot_info_label.setWordWrap(True)
         boot_info = InfoBanner("")
         boot_info_layout = boot_info.layout()
-        old_label = boot_info_layout.itemAt(1).widget()
-        boot_info_layout.replaceWidget(old_label, self._boot_info_label)
-        old_label.deleteLater()
+        if boot_info_layout is not None:
+            old_item = boot_info_layout.itemAt(1)
+            if old_item is not None:
+                old_label = old_item.widget()
+                if old_label is not None:
+                    boot_info_layout.replaceWidget(old_label, self._boot_info_label)
+                    old_label.deleteLater()
         layout.addWidget(boot_info)
 
         # Jadval
@@ -750,18 +754,19 @@ class MainWindow(QMainWindow):
             self._apps_table.setCellWidget(row, 0, info_widget)
 
             # Manba badge
-            badge_widgets = [SourceBadge(app.source)]
+            badge_widgets: list[QWidget] = [SourceBadge(app.source)]
             if app.has_update:
                 badge_widgets.append(UpdateBadge(app.new_version))
             self._apps_table.setCellWidget(row, 1, self._row_widget(badge_widgets))
 
             # Amallar
-            action_widgets = []
+            action_widgets: list[QWidget] = []
 
             if app.identifier in self._removing_apps:
-                action_widgets.append(OperationBadge("remove"))
+                badge = OperationBadge("remove")
+                action_widgets.append(badge)
                 self._apps_table.setCellWidget(
-                    row, 2, self._center_widget(action_widgets[0])
+                    row, 2, self._center_widget(badge)
                 )
                 self._apps_table.setRowHeight(row, 60)
                 red_brush = QColor(colors()["danger_bg"])
@@ -910,7 +915,8 @@ class MainWindow(QMainWindow):
             return
         
         # update funksiyasini topish
-        update_func = None
+        from typing import Callable
+        update_func: Callable[[str], bool] | None = None
         if app.source == "apt":
             update_func = update_apt_package
         elif app.source == "snap":
@@ -1301,8 +1307,15 @@ class MainWindow(QMainWindow):
         self._clean_worker.start()
 
     def _on_clean_terminal_output(self, text: str) -> None:
-        """Terminal oynasiga qator qo'shadi."""
+        """Terminal oynasiga qator qo'shadi (Visual buffer optimallashtirishi bilan)."""
         self._clean_terminal.insertPlainText(text)
+        # Scroll limit va laglarning oldini olish uchun maksimal 1000 qator saqlaymiz
+        doc = self._clean_terminal.document()
+        if doc is not None and doc.blockCount() > 1000:
+            cursor = self._clean_terminal.textCursor()
+            cursor.movePosition(cursor.MoveOperation.Start)
+            cursor.movePosition(cursor.MoveOperation.Down, cursor.MoveMode.KeepAnchor, 100)
+            cursor.removeSelectedText()
         self._clean_terminal.ensureCursorVisible()
 
     def _on_clean_progress(self, message: str) -> None:
@@ -1358,7 +1371,10 @@ class MainWindow(QMainWindow):
     # ── Xatoliklar Tab'i Yordamchi Funksiyalari ────────────────────────────
 
     def _add_error(self, message: str) -> None:
-        """Xatoliklar ro'yxatiga yangi xatolik qo'shadi."""
+        """Xatoliklar ro'yxatiga yangi xatolik qo'shadi va log faylga yozadi."""
+        from core.logger import get_logger
+        get_logger().error(message)
+
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         full_message = f"[{timestamp}] {message}"
         
