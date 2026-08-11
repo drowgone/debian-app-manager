@@ -27,13 +27,14 @@ class CardFrame(QFrame):
 
 
 class SectionHeader(QWidget):
-    """Bo'lim sarlavhasi va qisqa tavsif."""
+    """Bo'lim sarlavhasi va qisqa tavsif (Hover Info ℹ️ bilan)."""
 
     def __init__(
         self,
         title: str,
         subtitle: str = "",
         icon_name: str = "",
+        info_tooltip: str = "",
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -47,18 +48,38 @@ class SectionHeader(QWidget):
             icon = QIcon.fromTheme(icon_name)
             icon_label.setPixmap(icon.pixmap(20, 20))
             icon_label.setFixedSize(20, 20)
-            layout.addWidget(icon_label, alignment=Qt.AlignmentFlag.AlignTop)
+            layout.addWidget(icon_label, alignment=Qt.AlignmentFlag.AlignVCenter)
 
         text_col = QVBoxLayout()
         text_col.setContentsMargins(0, 0, 0, 0)
         text_col.setSpacing(2)
+
+        title_layout = QHBoxLayout()
+        title_layout.setContentsMargins(0, 0, 0, 0)
+        title_layout.setSpacing(8)
 
         title_label = QLabel(title)
         self._title_label = title_label
         title_label.setObjectName("sectionTitle")
         title_label.setFont(system_ui_font(13, bold=True))
         title_label.setStyleSheet(f"color: {c['text']};")
-        text_col.addWidget(title_label)
+        title_layout.addWidget(title_label)
+
+        # Hover Info (ℹ️) belgisi
+        self._info_btn = QLabel()
+        self._info_btn.setPixmap(QIcon.fromTheme("dialog-information-symbolic", QIcon.fromTheme("info")).pixmap(16, 16))
+        self._info_btn.setFixedSize(16, 16)
+        self._info_btn.setCursor(Qt.CursorShape.WhatsThisCursor)
+        self._info_tooltip = info_tooltip
+        if info_tooltip:
+            self._info_btn.setToolTip(info_tooltip)
+            self._info_btn.show()
+        else:
+            self._info_btn.hide()
+        title_layout.addWidget(self._info_btn)
+        title_layout.addStretch()
+
+        text_col.addLayout(title_layout)
 
         sub_label = QLabel(subtitle)
         self._sub_label = sub_label
@@ -72,10 +93,19 @@ class SectionHeader(QWidget):
 
         layout.addLayout(text_col, stretch=1)
 
-    def set_text(self, title: str, subtitle: str = "") -> None:
+    def set_text(self, title: str, subtitle: str = "", info_tooltip: str = "") -> None:
         self._title_label.setText(title)
         if self._sub_label is not None:
             self._sub_label.setText(subtitle)
+        if info_tooltip:
+            self._info_tooltip = info_tooltip
+            self._info_btn.setToolTip(info_tooltip)
+            self._info_btn.show()
+        elif self._info_tooltip:
+            self._info_btn.setToolTip(self._info_tooltip)
+            self._info_btn.show()
+        else:
+            self._info_btn.hide()
 
 
 class InfoBanner(QFrame):
